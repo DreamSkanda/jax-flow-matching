@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
-from jax import random, jit, vmap
+from jax import lax, random, jit, vmap
 from jax.example_libraries.stax import serial, Dense, Relu
 from jax.nn.initializers import zeros
 from jax.example_libraries import optimizers
@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 if __name__ == '__main__':
 
     # loading datasets
-    n_samples = 100000
+    n_samples = 10240
     plot_range = [(-2, 2), (-2, 2)]
     n_bins = 100
 
@@ -28,7 +28,8 @@ if __name__ == '__main__':
     # hyperparameters
     dim = X.shape[-1]
     sigma_min = 0.01
-    num_epochs, batch_size = 30, 10000
+    num_epochs, batch_size = 15, 1024
+    sample_size = 8192
 
     # building networks
     def make_vec_field_net(rng):
@@ -46,7 +47,7 @@ if __name__ == '__main__':
     batched_cond_flow, cond_vec_field = make_cond_flow(sigma_min)
 
     # initializing the sampler and logp calculator
-    batched_sampler, batched_logp = NeuralODE(vec_field_net, batch_size, dim)
+    batched_sampler, batched_logp = NeuralODE(vec_field_net, sample_size, dim)
 
     # initializing the loss function
     loss = make_loss(vec_field_net, cond_vec_field)
@@ -83,6 +84,9 @@ if __name__ == '__main__':
     sample_rng, rng = random.split(rng)
     
     X_syn = batched_sampler(sample_rng, params)
+    X_syn = lax.stop_gradient(X_syn)
+
+    print(- batched_logp(params, X_syn).mean())
 
     fig = plt.figure(figsize=(12, 6))
     plt.subplot(1, 2, 1)

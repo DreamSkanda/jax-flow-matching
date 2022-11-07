@@ -22,13 +22,14 @@ def make_cond_flow(sigma_min):
 
     return cond_flow, cond_vec_field
 
-def NeuralODE(vec_field_net, batch_size, dim):
+
+def NeuralODE(vec_field_net, sample_size, dim):
     
     def batched_sampler(rng, params):
         '''
         flow from x0 to x1
         '''
-        x0 = random.normal(rng, (batch_size, dim))
+        x0 = random.normal(rng, (sample_size, dim))
 
         def _ode(x, t):
             return vmap(vec_field_net, (None, 0, None), 0)(params, x, t)
@@ -66,5 +67,7 @@ def NeuralODE(vec_field_net, batch_size, dim):
             return jnp.trace(jac(x))
         return _div_f
     
-    
     return batched_sampler, logp
+
+if __name__ == '__main__':
+    pass
