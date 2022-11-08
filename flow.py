@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 from jax import random, vmap
 from jax.experimental import ode
+from diffrax import diffeqsolve, ODETerm, Dopri5
 from jax.scipy.stats import norm
 from functools import partial
 
@@ -29,17 +30,15 @@ def NeuralODE(vec_field_net, sample_size, dim):
         '''
         flow from x0 to x1
         '''
-        x0 = random.normal(rng, (sample_size, dim))
+        def f(t, y, params):
+            return vmap(vec_field_net, (None, 0, None), 0)(params, y, t)
 
-        def _ode(x, t):
-            return vmap(vec_field_net, (None, 0, None), 0)(params, x, t)
+        term = ODETerm(f)
+        solver = Dopri5()
+        y0 = random.normal(rng, (sample_size, dim))
+        solution = diffeqsolve(term, solver, t0=0, t1=1, y0=y0, max_steps=100)
 
-        xt = ode.odeint(_ode, 
-                        x0, 
-                        jnp.array([0.0, 1.0]),
-                        rtol=1e-10, atol=1e-10
-                        )
-        return xt[-1]
+        return solution.ys
 
     @partial(vmap, in_axes=(None, 0), out_axes=0)
     def logp(params, x):
@@ -49,17 +48,16 @@ def NeuralODE(vec_field_net, sample_size, dim):
         def base_logp(x):
             return norm.logpdf(x).sum(-1)
 
-        def _ode(state, t):
-            x = state[0]
-            return -vec_field_net(params, x, t), divergence_fwd(vec_field_net)(params, x, t)
+        def f(t, y, params):
+            return [-vec_field_net(params, y[0], t), divergence_fwd(vec_field_net)(params, y[0], t)]
 
         logp = 0.0
-        xt, logpt = ode.odeint(_ode, 
-                            [x, logp], 
-                            jnp.array([0.0, 1.0]),
-                            rtol=1e-10, atol=1e-10
-                            )
-        return -logpt[-1] + base_logp(xt[-1])
+
+        term = ODETerm(f)
+        solver = Dopri5()
+        solution = diffeqsolve(term, solver, t0=0, t1=1, y0=[x, logp], max_steps=100)
+        
+        return - solution.ys[1] + base_logp(solution.ys[0])
 
     def divergence_fwd(f):
         def _div_f(params, x, t):
