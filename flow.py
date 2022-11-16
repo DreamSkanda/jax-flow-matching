@@ -38,7 +38,7 @@ def NeuralODE(vec_field_net, sample_size, dim):
         y0 = random.normal(rng, (sample_size, dim))
         solution = diffeqsolve(term, solver, t0=0, t1=1, dt0=0.1, y0=y0, max_steps=100)
 
-        return solution.ys
+        return solution.ys[0]
 
     @partial(vmap, in_axes=(None, 0), out_axes=0)
     def logp(params, x):
@@ -58,6 +58,7 @@ def NeuralODE(vec_field_net, sample_size, dim):
         solution = diffeqsolve(term, solver, t0=0, t1=1, dt0=0.1, y0=[x, logp], max_steps=100)
         
         return - solution.ys[1] + base_logp(solution.ys[0])
+        #return solution.ys
 
     def divergence_fwd(f):
         def _div_f(params, x, t):
@@ -89,5 +90,6 @@ if __name__ == '__main__':
 
     batched_sampler, batched_logp = NeuralODE(vec_field_net, sample_size, dim)
 
-    print(batched_sampler(rng, params).shape)
+    print(batched_sampler(rng, params))
+    print(batched_logp(params, random.normal(rng, (sample_size, dim))))
 
