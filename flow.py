@@ -5,24 +5,6 @@ from jax.experimental import ode
 from jax.scipy.stats import norm
 from functools import partial
 
-def make_cond_flow(sigma_min):
-
-    def mu(x1, t):
-        return t*x1
-
-    def sigma(x1, t):
-        return 1 - (1 - sigma_min)*t
-
-    @partial(vmap, in_axes=(0, 0, 0), out_axes=0)
-    def cond_flow(x0, x1, t):
-        return sigma(x1, t) * x0 + mu(x1, t)
-
-    def cond_vec_field(x, x1, t):
-        return (x1 - (1 - sigma_min)*x)/(1 - (1 - sigma_min)*t)
-
-    return cond_flow, cond_vec_field
-
-
 def NeuralODE(vec_field_net, dim):
 
     def divergence_fwd(f):
@@ -110,7 +92,7 @@ if __name__ == '__main__':
     init_rng, rng = random.split(random.PRNGKey(42))
     params, vec_field_net = make_vec_field_net(init_rng)
 
-    forward, batched_sampler, logp_fun = NeuralODE(vec_field_net, sample_size, n*dim)
+    forward, reverse, batched_sampler, logp_fun = NeuralODE(vec_field_net, sample_size, n*dim)
 
     x0 = random.normal(rng, (sample_size, n*dim))
 
