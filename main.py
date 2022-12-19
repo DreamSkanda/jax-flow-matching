@@ -114,8 +114,7 @@ if __name__ == '__main__':
 
     plt.subplot(1, 2, 2)
     y = jnp.reshape(jnp.array(loss_history), (-1, 2))
-    plt.errorbar(jnp.arange(y.shape[0]), y[:, 0], yerr=y[:, 1], marker='o', capsize=8, label='couple')
-    plt.legend()
+    plt.errorbar(jnp.arange(y.shape[0]), y[:, 0], yerr=y[:, 1], marker='o', capsize=8)
 
     plt.savefig('%s_batchsize%i_epoch%i_samplesize%i_beta%i_n%i_spatial_dim%i_step%f.png' \
                 % (args.name, args.batchsize, args.epoch, args.samplesize, args.beta, args.n, args.dim, args.step))
