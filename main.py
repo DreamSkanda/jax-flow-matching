@@ -40,8 +40,13 @@ if __name__ == '__main__':
 
     '''generating datasets'''
     sampler = make_sampler(args.datasize, args.name)
+
+    start = time.time()
     data_rng, rng = random.split(rng)
     X0, X1 = sampler(data_rng, args.beta, args.n, args.dim)
+    end = time.time()
+    running_time = end - start
+    print('training set sampling time: %.5f sec' %running_time)
 
     '''building networks'''
     init_rng, rng = random.split(random.PRNGKey(42))
@@ -81,8 +86,12 @@ if __name__ == '__main__':
                 loss_history.append([d_mean, d_err])
         
         return get_params(opt_state), loss_history
-    
+
+    start = time.time()
     trained_params, loss_history = training(rng, args.epoch, params, X0, X1, args.step)
+    end = time.time()
+    running_time = end - start
+    print('training time: %.5f sec' %running_time)
 
     '''drawing samples'''
     start = time.time()
@@ -91,7 +100,7 @@ if __name__ == '__main__':
     end = time.time()
     running_time = end - start
     print('free energy using untrained model: %f ± %f' %(fe, fe_err))
-    print('time cost: %.5f sec' %running_time)
+    print('importance sampling time: %.5f sec' %running_time)
 
     start = time.time()
     fe_rng, rng = random.split(rng)
@@ -99,7 +108,9 @@ if __name__ == '__main__':
     end = time.time()
     running_time = end - start
     print('free energy using trained model: %f ± %f' %(fe, fe_err))
-    print('time cost: %.5f sec' %running_time)
+    print('importance sampling time: %.5f sec' %running_time)
+
+    print('training loops: %i' %loss_history.shape[0])
 
     '''plotting'''
     plot_range = [(-2, 2), (-2, 2)]
