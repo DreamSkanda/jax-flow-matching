@@ -110,7 +110,7 @@ if __name__ == '__main__':
     print('free energy using trained model: %f ± %f' %(fe, fe_err))
     print('importance sampling time: %.5f sec' %running_time)
 
-    print('training loops: %i' %loss_history.shape[0])
+    print('training loops: %i' %len(loss_history))
 
     '''plotting'''
     plot_range = [(-2, 2), (-2, 2)]
