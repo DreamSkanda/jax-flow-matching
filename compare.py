@@ -141,9 +141,11 @@ if __name__ == '__main__':
     
     plt.subplot(1, 3, 1)
     plt.hist2d(X_syn_show[:, 0], X_syn_show[:, 1], bins=n_bins, range=plot_range)
+    plt.title('coupled')
 
     plt.subplot(1, 3, 2)
     plt.hist2d(X_syn_dis_show[:, 0], X_syn_dis_show[:, 1], bins=n_bins, range=plot_range)
+    plt.title('discrete')
 
     plt.subplot(1, 3, 3)
     y = jnp.reshape(jnp.array(loss_history), (-1, 2))
@@ -152,5 +154,5 @@ if __name__ == '__main__':
     plt.errorbar(jnp.arange(y_dis.shape[0]), y_dis[:, 0], yerr=y_dis[:, 1], marker='o', capsize=8, label='discrete')
     plt.legend()
 
-    plt.savefig('discrete_%s_batchsize%i_epoch%i_samplesize%i_beta%i_n%i_spatial_dim%i_step%f.png' \
+    plt.savefig('compare_%s_batchsize%i_epoch%i_samplesize%i_beta%i_n%i_spatial_dim%i_step%f.png' \
                 % (args.name, args.batchsize, args.epoch, args.samplesize, args.beta, args.n, args.dim, args.step))
