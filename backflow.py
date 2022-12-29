@@ -45,10 +45,10 @@ if __name__=='__main__':
     import numpy as np
     n = 6
     dim = 2
-    t = 0.123 
     sizes = [64, 64]
     key = jax.random.PRNGKey(42)
     x = jax.random.normal(key, (n, dim))
+    t = jax.random.uniform(key)
 
     def forward_fn(x, t):
         net = Backflow(sizes)
