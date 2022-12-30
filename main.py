@@ -7,7 +7,7 @@ import optax
 import haiku as hk
 
 from data import make_sampler
-from net import make_vec_field_net
+from net import make_vec_field_net, make_backflow
 from flow import NeuralODE
 from loss import make_loss
 from energy import energy_fun, make_free_energy
@@ -42,6 +42,7 @@ if __name__ == '__main__':
     group.add_argument('-channel', type=int, default=512, help='The channels in a middle layer')
     group.add_argument('-numlayers', type=int, default=2, help='The number of layers in MLP')
     group.add_argument('-symmetry', type=bool, default=False, help='Use equivariant-MLP')
+    group.add_argument('-backflow', action='store_true', help='Use backflow')
 
     group = parser.add_argument_group('physics parameters')
     group.add_argument('-n', type=int, default=6, help='The number of particles')
@@ -62,7 +63,12 @@ if __name__ == '__main__':
 
     '''building networks'''
     init_rng, rng = random.split(random.PRNGKey(42))
-    params, vec_field_net = make_vec_field_net(init_rng, args.n, args.dim, ch=args.channel, num_layers=args.numlayers, symmetry=args.symmetry)
+    if args.backflow:
+        print ('construct backflow network')
+        params, vec_field_net = make_backflow(init_rng, args.n, args.dim, [args.channel]*args.numlayers)
+    else:
+        print ('construct mlp network')
+        params, vec_field_net = make_vec_field_net(init_rng, args.n, args.dim, ch=args.channel, num_layers=args.numlayers, symmetry=args.symmetry)
 
     '''initializing the sampler and logp calculator'''
     forward, reverse, batched_sample_fun, logp_fun = NeuralODE(vec_field_net, args.n*args.dim)

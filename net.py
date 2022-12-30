@@ -9,6 +9,7 @@ from emlp.reps import V
 from emlp.groups import SO, Z
 from emlp.reps import Rep
 from emlp.nn import uniform_rep
+from backflow import Backflow
 import logging
 
 def Sequential(*args):
@@ -79,6 +80,17 @@ def make_vec_field_net(rng, n, spatial_dim, ch=512, num_layers=2, symmetry=False
     net_apply = net.apply
 
     return params, net_apply
+
+def make_backflow(key, n, dim, sizes):
+    x = jax.random.normal(key, (n, dim))
+    t = jax.random.uniform(key)
+
+    def forward_fn(x, t):
+        net = Backflow(sizes)
+        return net(x.reshape(n, dim), t).reshape(n*dim)
+    network = hk.without_apply_rng(hk.transform(forward_fn))
+    params = network.init(key, x, t)
+    return params, network.apply 
 
 if __name__ == '__main__':
     from jax.config import config
