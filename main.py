@@ -7,7 +7,7 @@ import optax
 import haiku as hk
 
 from data import make_sampler
-from net import make_vec_field_net, make_backflow
+from net import make_vec_field_net, make_backflow, make_transformer
 from flow import NeuralODE
 from loss import make_loss
 from energy import energy_fun, make_free_energy
@@ -40,9 +40,14 @@ if __name__ == '__main__':
 
     group = parser.add_argument_group('network parameters')
     group.add_argument('-channel', type=int, default=512, help='The channels in a middle layer')
-    group.add_argument('-numlayers', type=int, default=2, help='The number of layers in MLP')
+    group.add_argument('-numlayers', type=int, default=4, help='The number of layers')
+    group.add_argument('-nheads', type=int, default=8, help='')
+    group.add_argument('-keysize', type=int, default=16, help='')
     group.add_argument('-symmetry', type=bool, default=False, help='Use equivariant-MLP')
+    
+    group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-backflow', action='store_true', help='Use backflow')
+    group.add_argument('-transformer', action='store_true', help='Use transformer')
 
     group = parser.add_argument_group('physics parameters')
     group.add_argument('-n', type=int, default=6, help='The number of particles')
@@ -66,6 +71,9 @@ if __name__ == '__main__':
     if args.backflow:
         print ('construct backflow network')
         params, vec_field_net = make_backflow(init_rng, args.n, args.dim, [args.channel]*args.numlayers)
+    elif args.transformer:
+        print ('construct transformer network')
+        params, vec_field_net = make_transformer(init_rng, args.n, args.dim, args.nheads, args.numlayers, args.keysize)
     else:
         print ('construct mlp network')
         params, vec_field_net = make_vec_field_net(init_rng, args.n, args.dim, ch=args.channel, num_layers=args.numlayers, symmetry=args.symmetry)
