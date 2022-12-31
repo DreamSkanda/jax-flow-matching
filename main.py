@@ -81,9 +81,11 @@ if __name__ == '__main__':
     '''training with samples'''
     def training(rng, num_epochs, init_params, X0, X1, step_size, type_optim = optax.adam):
         
+        @jax.jit
         def step(rng, i, state, x0, x1):
-            x0 = x0.reshape(-1, args.n*args.dim)
-            x1 = x1.reshape(-1, args.n*args.dim)
+            rng, sample_rng = random.split(rng)
+            x0 = random.normal(sample_rng, (x1.shape[0], x1.shape[1]))
+
             t = random.uniform(rng, (args.batchsize,))
 
             value, grad = value_and_grad(state.params, x0, x1, t)
@@ -106,6 +108,7 @@ if __name__ == '__main__':
             X1 = random.permutation(permute_rng, X1)
             for batch_index in range(0, len(X1), args.batchsize):
                 state, (d_mean, d_err) = step(step_rng, next(itercount), state, X0[batch_index:batch_index+args.batchsize], X1[batch_index:batch_index+args.batchsize])
+                print (epoch, d_mean)
                 loss_history.append([d_mean, d_err])
         
         return state.params, loss_history
@@ -119,18 +122,20 @@ if __name__ == '__main__':
     '''drawing samples'''
     start = time.time()
     fe_rng, rng = random.split(rng)
-    fe, fe_err, _ = free_energy(fe_rng, params, args.samplesize)
+    fe, fe_err, _, f, f_err = free_energy(fe_rng, params, args.samplesize)
     end = time.time()
     running_time = end - start
     print('free energy using untrained model: %f ± %f' %(fe, fe_err))
+    print('variational free energy using untrained model: %f ± %f' %(f, f_err))
     print('importance sampling time: %.5f sec' %running_time)
 
     start = time.time()
     fe_rng, rng = random.split(rng)
-    fe, fe_err, X_syn = free_energy(fe_rng, trained_params, args.samplesize)
+    fe, fe_err, X_syn, f, f_err = free_energy(fe_rng, trained_params, args.samplesize)
     end = time.time()
     running_time = end - start
     print('free energy using trained model: %f ± %f' %(fe, fe_err))
+    print('variational free energy using trained model: %f ± %f' %(f, f_err))
     print('importance sampling time: %.5f sec' %running_time)
 
     print('training loops: %i' %len(loss_history))
@@ -144,8 +149,7 @@ if __name__ == '__main__':
     fig = plt.figure(figsize=(18, 6))
     
     plt.subplot(1, 2, 1)
-    plt.hist2d(X_syn_show[:, 0], X_syn_show[:, 1], bins=n_bins, range=plot_range)
-
+    plt.hist2d(X_syn_show[:, 0], X_syn_show[:, 1], bins=n_bins, range=plot_range, density=True, cmap="inferno")
     plt.subplot(1, 2, 2)
     y = jnp.reshape(jnp.array(loss_history), (-1, 2))
     plt.errorbar(jnp.arange(y.shape[0]), y[:, 0], yerr=y[:, 1], marker='o', capsize=8)
