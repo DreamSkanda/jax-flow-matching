@@ -2,7 +2,6 @@ import jax
 import jax.numpy as jnp
 from jax import random
 from jax.config import config
-from jax.example_libraries import optimizers
 import optax
 import haiku as hk
 
@@ -32,7 +31,7 @@ if __name__ == '__main__':
     group.add_argument('-epoch', type=int, default=15, help='')
     group.add_argument('-batchsize', type=int, default=4096, help='')
     group.add_argument('-samplesize', type=int, default=4096, help='')
-    group.add_argument('-step', type=float, default=1e-2, help='')
+    group.add_argument('-lr', type=float, default=1e-3, help='learning rate')
 
     group = parser.add_argument_group('datasets')
     group.add_argument('-datasize', type=int, default=102400, help='')
@@ -93,7 +92,7 @@ if __name__ == '__main__':
     value_and_grad = jax.value_and_grad(loss, argnums=0, has_aux=True)
 
     '''training with samples'''
-    def training(rng, num_epochs, init_params, X0, X1, step_size, type_optim = optax.adam):
+    def training(rng, num_epochs, init_params, X0, X1, learning_rate, type_optim = optax.adam):
         
         @jax.jit
         def step(rng, i, state, x0, x1):
@@ -109,7 +108,7 @@ if __name__ == '__main__':
 
             return TrainingState(params, opt_state), value
         
-        optimizer = type_optim(step_size)
+        optimizer = type_optim(learning_rate)
         init_opt_state = optimizer.init(init_params)
 
         state = TrainingState(init_params, init_opt_state)
@@ -128,7 +127,7 @@ if __name__ == '__main__':
         return state.params, loss_history
 
     start = time.time()
-    trained_params, loss_history = training(rng, args.epoch, params, X0, X1, args.step)
+    trained_params, loss_history = training(rng, args.epoch, params, X0, X1, args.lr)
     end = time.time()
     running_time = end - start
     print('training time: %.5f sec' %running_time)
@@ -168,5 +167,5 @@ if __name__ == '__main__':
     y = jnp.reshape(jnp.array(loss_history), (-1, 2))
     plt.errorbar(jnp.arange(y.shape[0]), y[:, 0], yerr=y[:, 1], marker='o', capsize=8)
 
-    plt.savefig('haiku_%s_batchsize%i_epoch%i_samplesize%i_ch%i_layer%i_symmetry-%r_beta%i_n%i_spatial_dim%i_step%f.png' \
-                % (args.name, args.batchsize, args.epoch, args.samplesize, args.channel, args.numlayers, args.symmetry, args.beta, args.n, args.dim, args.step))
+    plt.savefig('haiku_%s_batchsize%i_epoch%i_samplesize%i_ch%i_layer%i_symmetry-%r_beta%i_n%i_spatial_dim%i_lr%f.png' \
+                % (args.name, args.batchsize, args.epoch, args.samplesize, args.channel, args.numlayers, args.symmetry, args.beta, args.n, args.dim, args.lr))
