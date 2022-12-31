@@ -7,7 +7,7 @@ def make_loss(vec_field_net):
     @partial(vmap, in_axes=(None, 0, 0, 0), out_axes=0)
     def _matching(params, x0, x1, t):
         x = t*x1 + (1 - t)*x0
-        return jnp.linalg.norm((x1 - x0) - vec_field_net(params, x, t))
+        return jnp.sum(((x1 - x0) - vec_field_net(params, x, t))**2)
 
     def loss(params, x0, x1, t):
         m = _matching(params, x0, x1, t)

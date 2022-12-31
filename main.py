@@ -7,7 +7,7 @@ import optax
 import haiku as hk
 
 from data import make_sampler
-from net import make_vec_field_net, make_backflow
+from net import make_vec_field_net, make_backflow, make_transformer
 from flow import NeuralODE
 from loss import make_loss
 from energy import energy_fun, make_free_energy
@@ -40,9 +40,15 @@ if __name__ == '__main__':
 
     group = parser.add_argument_group('network parameters')
     group.add_argument('-channel', type=int, default=512, help='The channels in a middle layer')
-    group.add_argument('-numlayers', type=int, default=2, help='The number of layers in MLP')
-    group.add_argument('-symmetry', type=bool, default=False, help='Use equivariant-MLP')
+    group.add_argument('-numlayers', type=int, default=4, help='The number of layers')
+    group.add_argument('-nheads', type=int, default=8, help='')
+    group.add_argument('-keysize', type=int, default=16, help='')
+    
+    group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-backflow', action='store_true', help='Use backflow')
+    group.add_argument('-transformer', action='store_true', help='Use transformer')
+    group.add_argument('-mlp', action='store_true', help='mlp')
+    group.add_argument('-emlp', action='store_true', help='emlp')
 
     group = parser.add_argument_group('physics parameters')
     group.add_argument('-n', type=int, default=6, help='The number of particles')
@@ -66,9 +72,17 @@ if __name__ == '__main__':
     if args.backflow:
         print ('construct backflow network')
         params, vec_field_net = make_backflow(init_rng, args.n, args.dim, [args.channel]*args.numlayers)
-    else:
+    elif args.transformer:
+        print ('construct transformer network')
+        params, vec_field_net = make_transformer(init_rng, args.n, args.dim, args.nheads, args.numlayers, args.keysize)
+    elif args.mlp:
         print ('construct mlp network')
-        params, vec_field_net = make_vec_field_net(init_rng, args.n, args.dim, ch=args.channel, num_layers=args.numlayers, symmetry=args.symmetry)
+        params, vec_field_net = make_vec_field_net(init_rng, args.n, args.dim, ch=args.channel, num_layers=args.numlayers, symmetry=False)
+    elif args.emlp:
+        print ('construct emlp network')
+        params, vec_field_net = make_vec_field_net(init_rng, args.n, args.dim, ch=args.channel, num_layers=args.numlayers, symmetry=True)
+    else:
+        raise ValueError("what model ?")
 
     '''initializing the sampler and logp calculator'''
     forward, reverse, batched_sample_fun, logp_fun = NeuralODE(vec_field_net, args.n*args.dim)
@@ -81,9 +95,11 @@ if __name__ == '__main__':
     '''training with samples'''
     def training(rng, num_epochs, init_params, X0, X1, step_size, type_optim = optax.adam):
         
+        @jax.jit
         def step(rng, i, state, x0, x1):
-            x0 = x0.reshape(-1, args.n*args.dim)
-            x1 = x1.reshape(-1, args.n*args.dim)
+            rng, sample_rng = random.split(rng)
+            x0 = random.normal(sample_rng, (x1.shape[0], x1.shape[1]))
+
             t = random.uniform(rng, (args.batchsize,))
 
             value, grad = value_and_grad(state.params, x0, x1, t)
@@ -106,6 +122,7 @@ if __name__ == '__main__':
             X1 = random.permutation(permute_rng, X1)
             for batch_index in range(0, len(X1), args.batchsize):
                 state, (d_mean, d_err) = step(step_rng, next(itercount), state, X0[batch_index:batch_index+args.batchsize], X1[batch_index:batch_index+args.batchsize])
+                print (epoch, d_mean)
                 loss_history.append([d_mean, d_err])
         
         return state.params, loss_history
@@ -117,20 +134,22 @@ if __name__ == '__main__':
     print('training time: %.5f sec' %running_time)
 
     '''drawing samples'''
-    start = time.time()
-    fe_rng, rng = random.split(rng)
-    fe, fe_err, _ = free_energy(fe_rng, params, args.samplesize)
-    end = time.time()
-    running_time = end - start
-    print('free energy using untrained model: %f ± %f' %(fe, fe_err))
-    print('importance sampling time: %.5f sec' %running_time)
+    #start = time.time()
+    #fe_rng, rng = random.split(rng)
+    #fe, fe_err, _, f, f_err = free_energy(fe_rng, params, args.samplesize)
+    #end = time.time()
+    #running_time = end - start
+    #print('free energy using untrained model: %f ± %f' %(fe, fe_err))
+    #print('variational free energy using untrained model: %f ± %f' %(f, f_err))
+    #print('importance sampling time: %.5f sec' %running_time)
 
     start = time.time()
     fe_rng, rng = random.split(rng)
-    fe, fe_err, X_syn = free_energy(fe_rng, trained_params, args.samplesize)
+    fe, fe_err, X_syn, f, f_err = free_energy(fe_rng, trained_params, args.samplesize)
     end = time.time()
     running_time = end - start
     print('free energy using trained model: %f ± %f' %(fe, fe_err))
+    print('variational free energy using trained model: %f ± %f' %(f, f_err))
     print('importance sampling time: %.5f sec' %running_time)
 
     print('training loops: %i' %len(loss_history))
@@ -144,8 +163,7 @@ if __name__ == '__main__':
     fig = plt.figure(figsize=(18, 6))
     
     plt.subplot(1, 2, 1)
-    plt.hist2d(X_syn_show[:, 0], X_syn_show[:, 1], bins=n_bins, range=plot_range)
-
+    plt.hist2d(X_syn_show[:, 0], X_syn_show[:, 1], bins=n_bins, range=plot_range, density=True, cmap="inferno")
     plt.subplot(1, 2, 2)
     y = jnp.reshape(jnp.array(loss_history), (-1, 2))
     plt.errorbar(jnp.arange(y.shape[0]), y[:, 0], yerr=y[:, 1], marker='o', capsize=8)
