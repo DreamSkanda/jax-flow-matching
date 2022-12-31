@@ -43,11 +43,12 @@ if __name__ == '__main__':
     group.add_argument('-numlayers', type=int, default=4, help='The number of layers')
     group.add_argument('-nheads', type=int, default=8, help='')
     group.add_argument('-keysize', type=int, default=16, help='')
-    group.add_argument('-symmetry', type=bool, default=False, help='Use equivariant-MLP')
     
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-backflow', action='store_true', help='Use backflow')
     group.add_argument('-transformer', action='store_true', help='Use transformer')
+    group.add_argument('-mlp', action='store_true', help='mlp')
+    group.add_argument('-emlp', action='store_true', help='emlp')
 
     group = parser.add_argument_group('physics parameters')
     group.add_argument('-n', type=int, default=6, help='The number of particles')
@@ -74,9 +75,14 @@ if __name__ == '__main__':
     elif args.transformer:
         print ('construct transformer network')
         params, vec_field_net = make_transformer(init_rng, args.n, args.dim, args.nheads, args.numlayers, args.keysize)
-    else:
+    elif args.mlp:
         print ('construct mlp network')
-        params, vec_field_net = make_vec_field_net(init_rng, args.n, args.dim, ch=args.channel, num_layers=args.numlayers, symmetry=args.symmetry)
+        params, vec_field_net = make_vec_field_net(init_rng, args.n, args.dim, ch=args.channel, num_layers=args.numlayers, symmetry=False)
+    elif args.emlp:
+        print ('construct emlp network')
+        params, vec_field_net = make_vec_field_net(init_rng, args.n, args.dim, ch=args.channel, num_layers=args.numlayers, symmetry=True)
+    else:
+        raise ValueError("what model ?")
 
     '''initializing the sampler and logp calculator'''
     forward, reverse, batched_sample_fun, logp_fun = NeuralODE(vec_field_net, args.n*args.dim)
@@ -128,14 +134,14 @@ if __name__ == '__main__':
     print('training time: %.5f sec' %running_time)
 
     '''drawing samples'''
-    start = time.time()
-    fe_rng, rng = random.split(rng)
-    fe, fe_err, _, f, f_err = free_energy(fe_rng, params, args.samplesize)
-    end = time.time()
-    running_time = end - start
-    print('free energy using untrained model: %f ± %f' %(fe, fe_err))
-    print('variational free energy using untrained model: %f ± %f' %(f, f_err))
-    print('importance sampling time: %.5f sec' %running_time)
+    #start = time.time()
+    #fe_rng, rng = random.split(rng)
+    #fe, fe_err, _, f, f_err = free_energy(fe_rng, params, args.samplesize)
+    #end = time.time()
+    #running_time = end - start
+    #print('free energy using untrained model: %f ± %f' %(fe, fe_err))
+    #print('variational free energy using untrained model: %f ± %f' %(f, f_err))
+    #print('importance sampling time: %.5f sec' %running_time)
 
     start = time.time()
     fe_rng, rng = random.split(rng)
