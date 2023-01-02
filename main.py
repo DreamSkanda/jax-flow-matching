@@ -1,7 +1,8 @@
 import jax
+from jax.config import config
+config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 from jax import random
-from jax.config import config
 import optax
 import haiku as hk
 
@@ -21,11 +22,13 @@ class TrainingState(NamedTuple):
     opt_state: optax.OptState
 
 if __name__ == '__main__':
-    config.update("jax_enable_x64", True)
     rng = random.PRNGKey(42)
 
     import argparse
     parser = argparse.ArgumentParser(description='')
+
+    parser.add_argument("-ds", default='datasets/',help="where to load the datasets for training")
+    parser.add_argument("-fig", default='figures/',help="where to store the figures")
 
     group = parser.add_argument_group('learning parameters')
     group.add_argument('-epoch', type=int, default=15, help='')
@@ -56,30 +59,60 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    '''generating datasets'''
-    sampler = make_sampler(args.datasize, args.name)
+####################################################################################
 
-    start = time.time()
-    data_rng, rng = random.split(rng)
-    X0, X1 = sampler(data_rng, args.beta, args.n, args.dim)
-    end = time.time()
-    running_time = end - start
-    print('training set sampling time: %.5f sec' %running_time)
+    print("\n========== Load dataset ==========")
+    
+    import os
+    if not os.path.exists(args.ds):
+        os.makedirs(args.ds)
+
+    file = args.ds + args.name + 'datasize%i_beta%i_n%i_dim%i.npz' % (args.datasize, args.beta, args.n, args.dim)
+
+    if os.path.isfile(file):
+        data = jnp.load(file)
+        X0, X1 = data['X0'], data['X1']
+
+        print("File %s has been loaded." % file)
+    else:
+        print("File %s does not exist." % file)
+
+        print("\n========== Generate dataset using MCMC ==========")
+        
+        sampler = make_sampler(args.datasize, args.name)
+        data_rng, rng = random.split(rng)
+
+        start = time.time()
+        X0, X1 = sampler(data_rng, args.beta, args.n, args.dim)
+        end = time.time()
+        running_time = end - start
+        
+        print("sampling time: %.5f sec" % running_time)
+
+        jnp.savez(file, X0=X0, X1=X1)
+
+        print("File %s has been generated." % file)
+
+####################################################################################
 
     '''building networks'''
-    init_rng, rng = random.split(random.PRNGKey(42))
+    init_rng, rng = random.split(rng)
     if args.backflow:
-        print ('construct backflow network')
+        print('\n========== Construct backflow network ==========')
         params, vec_field_net = make_backflow(init_rng, args.n, args.dim, [args.channel]*args.numlayers)
+        net_name = 'backflow'
     elif args.transformer:
-        print ('construct transformer network')
+        print("\n========== Construct transformer network ==========")
         params, vec_field_net = make_transformer(init_rng, args.n, args.dim, args.nheads, args.numlayers, args.keysize)
+        net_name = 'transformer'
     elif args.mlp:
-        print ('construct mlp network')
+        print("\n========== Construct mlp network ==========")
         params, vec_field_net = make_vec_field_net(init_rng, args.n, args.dim, ch=args.channel, num_layers=args.numlayers, symmetry=False)
+        net_name = 'mlp'
     elif args.emlp:
-        print ('construct emlp network')
+        print("\n========== Construct emlp network ==========")
         params, vec_field_net = make_vec_field_net(init_rng, args.n, args.dim, ch=args.channel, num_layers=args.numlayers, symmetry=True)
+        net_name = 'emlp'
     else:
         raise ValueError("what model ?")
 
@@ -90,6 +123,8 @@ if __name__ == '__main__':
     '''initializing the loss function'''
     loss = make_loss(vec_field_net)
     value_and_grad = jax.value_and_grad(loss, argnums=0, has_aux=True)
+
+####################################################################################
 
     '''training with samples'''
     def training(rng, num_epochs, init_params, X0, X1, learning_rate, type_optim = optax.adam):
@@ -126,11 +161,17 @@ if __name__ == '__main__':
         
         return state.params, loss_history
 
+    print("\n========== Training ==========")
+
     start = time.time()
     trained_params, loss_history = training(rng, args.epoch, params, X0, X1, args.lr)
     end = time.time()
     running_time = end - start
     print('training time: %.5f sec' %running_time)
+
+####################################################################################
+
+    print("\n========== Calculating free energy ==========")
 
     '''drawing samples'''
     #start = time.time()
@@ -151,7 +192,7 @@ if __name__ == '__main__':
     print('variational free energy using trained model: %f ± %f' %(f, f_err))
     print('importance sampling time: %.5f sec' %running_time)
 
-    print('training loops: %i' %len(loss_history))
+    print("training loops: %i" % len(loss_history))
 
     '''plotting'''
     plot_range = [(-2, 2), (-2, 2)]
@@ -167,5 +208,12 @@ if __name__ == '__main__':
     y = jnp.reshape(jnp.array(loss_history), (-1, 2))
     plt.errorbar(jnp.arange(y.shape[0]), y[:, 0], yerr=y[:, 1], marker='o', capsize=8)
 
-    plt.savefig('haiku_%s_batchsize%i_epoch%i_samplesize%i_ch%i_layer%i_symmetry-%r_beta%i_n%i_spatial_dim%i_lr%f.png' \
-                % (args.name, args.batchsize, args.epoch, args.samplesize, args.channel, args.numlayers, args.symmetry, args.beta, args.n, args.dim, args.lr))
+    if not os.path.exists(args.fig):
+        os.makedirs(args.fig)
+
+    if args.tranformer:
+        plt.savefig('haiku_%s_batchsize%i_epoch%i_samplesize%i_head%i_layer%i_key%i_beta%i_n%i_dim%i_lr%f.png' \
+                    % (net_name, args.batchsize, args.epoch, args.samplesize, args.nheads, args.numlayers, args.keysize, args.beta, args.n, args.dim, args.lr))
+    else:
+        plt.savefig('haiku_%s_batchsize%i_epoch%i_samplesize%i_ch%i_layer%i_beta%i_n%i_dim%i_lr%f.png' \
+                    % (net_name, args.batchsize, args.epoch, args.samplesize, args.channel, args.numlayers, args.beta, args.n, args.dim, args.lr))
