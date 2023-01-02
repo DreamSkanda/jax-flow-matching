@@ -151,10 +151,11 @@ if __name__ == '__main__':
         itercount = itertools.count()
         loss_history = []
         for epoch in range(num_epochs):
-            permute_rng, step_rng, rng = random.split(rng, 3)
+            permute_rng, rng = random.split(rng)
             X0 = random.permutation(permute_rng, X0)
             X1 = random.permutation(permute_rng, X1)
             for batch_index in range(0, len(X1), args.batchsize):
+                step_rng, rng = random.split(rng)
                 state, (d_mean, d_err) = step(step_rng, next(itercount), state, X0[batch_index:batch_index+args.batchsize], X1[batch_index:batch_index+args.batchsize])
                 print (epoch, d_mean)
                 loss_history.append([d_mean, d_err])

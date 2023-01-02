@@ -2,4 +2,5 @@
 job*
 *.out
 /datasets
+/figs
 /__pycache__
