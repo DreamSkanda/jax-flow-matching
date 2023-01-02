@@ -1,4 +1,6 @@
 *.png
 job*
 *.out
+/datasets
+/figures
 /__pycache__
