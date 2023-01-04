@@ -11,15 +11,13 @@ from net import make_vec_field_net, make_backflow, make_transformer
 from flow import NeuralODE
 from loss import make_loss
 from energy import energy_fun, make_free_energy
+from train import train
 
-from typing import NamedTuple
+
 import itertools
 import time
 import matplotlib.pyplot as plt
 
-class TrainingState(NamedTuple):
-    params: hk.Params
-    opt_state: optax.OptState
 
 if __name__ == "__main__":
     rng = random.PRNGKey(42)
@@ -27,36 +25,34 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="")
 
-    parser.add_argument("-ds", default="datasets/",help="where to load the datasets for training")
-    parser.add_argument("-fig", default="figures/",help="where to store the figures")
-
     group = parser.add_argument_group("learning parameters")
-    group.add_argument("-coupled", action="store_true", help="Use coupled training method")
-    group.add_argument("-epoch", type=int, default=15, help="")
-    group.add_argument("-batchsize", type=int, default=4096, help="")
-    group.add_argument("-samplesize", type=int, default=4096, help="")
-    group.add_argument("-lr", type=float, default=1e-3, help="learning rate")
+    group.add_argument("--coupled", action="store_true", help="Use coupled training method")
+    group.add_argument("--epochs", type=int, default=1000, help="")
+    group.add_argument("--batchsize", type=int, default=4096, help="")
+    group.add_argument("--samplesize", type=int, default=4096, help="")
+    group.add_argument("--lr", type=float, default=1e-3, help="learning rate")
+    group.add_argument("--data", default="./data/", help="The folder to save data")
 
     group = parser.add_argument_group("datasets")
-    group.add_argument("-datasize", type=int, default=102400, help="")
-    group.add_argument("-name", type=str, default="mcmc", help="")
+    group.add_argument("--dataset", default="./datasets/",help="The folder to load training datasets")
+    group.add_argument("--datasize", type=int, default=102400, help="")
 
     group = parser.add_argument_group("network parameters")
-    group.add_argument("-channel", type=int, default=512, help="The channels in a middle layer")
-    group.add_argument("-numlayers", type=int, default=4, help="The number of layers")
-    group.add_argument("-nheads", type=int, default=8, help="")
-    group.add_argument("-keysize", type=int, default=16, help="")
+    group.add_argument("--nhiddens", type=int, default=512, help="The channels in a middle layer")
+    group.add_argument("--nlayers", type=int, default=4, help="The number of layers")
+    group.add_argument("--nheads", type=int, default=8, help="")
+    group.add_argument("--keysize", type=int, default=16, help="")
     
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("-backflow", action="store_true", help="Use backflow")
-    group.add_argument("-transformer", action="store_true", help="Use transformer")
-    group.add_argument("-mlp", action="store_true", help="Use mlp")
-    group.add_argument("-emlp", action="store_true", help="Use equivariant-mlp")
+    group.add_argument("--backflow", action="store_true", help="Use backflow")
+    group.add_argument("--transformer", action="store_true", help="Use transformer")
+    group.add_argument("--mlp", action="store_true", help="Use mlp")
+    group.add_argument("--emlp", action="store_true", help="Use equivariant-mlp")
 
     group = parser.add_argument_group("physics parameters")
-    group.add_argument("-n", type=int, default=6, help="The number of particles")
-    group.add_argument("-dim", type=int, default=2, help="The dimensions of the system")
-    group.add_argument("-beta", type=float, default=10.0, help="")
+    group.add_argument("--n", type=int, default=6, help="The number of particles")
+    group.add_argument("--dim", type=int, default=2, help="The dimensions of the system")
+    group.add_argument("--beta", type=float, default=10.0, help="The inverse temperature")
 
     args = parser.parse_args()
 
@@ -65,10 +61,9 @@ if __name__ == "__main__":
     print("\n========== Load dataset ==========")
     
     import os
-    if not os.path.exists(args.ds):
-        os.makedirs(args.ds)
+    os.makedirs(args.dataset, exist_ok=True)
 
-    file = args.ds + args.name + "datasize%i_beta%i_n%i_dim%i.npz" % (args.datasize, args.beta, args.n, args.dim)
+    file = args.dataset + "datasize%i_beta%i_n%i_dim%i.npz" % (args.datasize, args.beta, args.n, args.dim)
 
     if os.path.isfile(file):
         data = jnp.load(file)
@@ -80,7 +75,7 @@ if __name__ == "__main__":
 
         print("\n========== Generate dataset using MCMC ==========")
         
-        sampler = make_sampler(args.datasize, args.name)
+        sampler = make_sampler(args.datasize)
         data_rng, rng = random.split(rng)
 
         start = time.time()
@@ -100,20 +95,20 @@ if __name__ == "__main__":
     init_rng, rng = random.split(rng)
     if args.backflow:
         print("\n========== Construct backflow network ==========")
-        params, vec_field_net = make_backflow(init_rng, args.n, args.dim, [args.channel]*args.numlayers)
-        net_name = "backflow"
+        params, vec_field_net = make_backflow(init_rng, args.n, args.dim, [args.nhiddens]*args.nlayers)
+        modelname = "backflow_nl_%d_nh_%d" % (args.nlayers, args.nhiddens)
     elif args.transformer:
         print("\n========== Construct transformer network ==========")
-        params, vec_field_net = make_transformer(init_rng, args.n, args.dim, args.nheads, args.numlayers, args.keysize)
-        net_name = "transformer"
+        params, vec_field_net = make_transformer(init_rng, args.n, args.dim, args.nheads, args.nlayers, args.keysize)
+        modelname = "transformer_nl_%d_nh_%d_nk_%d" % (args.nlayers, args.nheads, args.keysize)
     elif args.mlp:
         print("\n========== Construct mlp network ==========")
-        params, vec_field_net = make_vec_field_net(init_rng, args.n, args.dim, ch=args.channel, num_layers=args.numlayers, symmetry=False)
-        net_name = "mlp"
+        params, vec_field_net = make_vec_field_net(init_rng, args.n, args.dim, ch=args.nhiddens, num_layers=args.nlayers, symmetry=False)
+        modelname = "mlp_nl_%d_nh_%d" % (args.nlayers, args.nhiddens)
     elif args.emlp:
         print("\n========== Construct emlp network ==========")
-        params, vec_field_net = make_vec_field_net(init_rng, args.n, args.dim, ch=args.channel, num_layers=args.numlayers, symmetry=True)
-        net_name = "emlp"
+        params, vec_field_net = make_vec_field_net(init_rng, args.n, args.dim, ch=args.nhiddens, num_layers=args.nlayers, symmetry=True)
+        modelname = "emlp"
     else:
         raise ValueError("what model ?")
 
@@ -127,49 +122,20 @@ if __name__ == "__main__":
 
 ####################################################################################
 
-    """training with samples"""
-    def training(rng, num_epochs, init_params, X0, X1, learning_rate, type_optim = optax.adam):
-        
-        @jax.jit
-        def step(rng, i, state, x0, x1):
-            rng, sample_rng = random.split(rng)
-            if not args.coupled:
-                x0 = random.normal(sample_rng, (x1.shape[0], x1.shape[1]))
+    print("\n========== Prepare logs ==========")
 
-            t = random.uniform(rng, (args.batchsize,))
+    methodname = "coupled" if args.coupled else "discrete"
+    path = args.data + "n_%d_dim_%d_beta_%g_lr_%g" % (args.n, args.dim, args.beta, args.lr) \
+                        + "_" + methodname + "_" + modelname
+    os.makedirs(path, exist_ok=True)
+    print("Create directory: %s" % path)
 
-            value, grad = value_and_grad(state.params, x0, x1, t)
+####################################################################################
 
-            updates, opt_state = optimizer.update(grad, state.opt_state)
-            params = optax.apply_updates(state.params, updates)
-
-            return TrainingState(params, opt_state), value
-        
-        optimizer = type_optim(learning_rate)
-        init_opt_state = optimizer.init(init_params)
-
-        state = TrainingState(init_params, init_opt_state)
-
-        itercount = itertools.count()
-        loss_history = []
-        for epoch in range(num_epochs):
-            permute_rng, rng = random.split(rng)
-            X0 = random.permutation(permute_rng, X0)
-            X1 = random.permutation(permute_rng, X1)
-            for batch_index in range(0, len(X1), args.batchsize):
-                step_rng, rng = random.split(rng)
-                state, (d_mean, d_err) = step(step_rng, next(itercount), state, X0[batch_index:batch_index+args.batchsize], X1[batch_index:batch_index+args.batchsize])
-                print (epoch, d_mean)
-                loss_history.append([d_mean, d_err])
-        
-        return state.params, loss_history
-
-    training_method = "coupled" if args.coupled else "discrete"
-
-    print("\n========== Training with %s samples ==========" % training_method)
+    print("\n========== Start training with %s samples ==========" % methodname)
 
     start = time.time()
-    trained_params, loss_history = training(rng, args.epoch, params, X0, X1, args.lr)
+    params = train(rng, value_and_grad, args.epochs, args.batchsize, params, X0, X1, args.lr, path, coupled=args.coupled)
     end = time.time()
     running_time = end - start
     print("training time: %.5f sec" %running_time)
@@ -178,47 +144,11 @@ if __name__ == "__main__":
 
     print("\n========== Calculating free energy ==========")
 
-    """drawing samples"""
-    #start = time.time()
-    #fe_rng, rng = random.split(rng)
-    #fe, fe_err, _, f, f_err = free_energy(fe_rng, params, args.samplesize)
-    #end = time.time()
-    #running_time = end - start
-    #print("free energy using untrained model: %f ± %f" %(fe, fe_err))
-    #print("variational free energy using untrained model: %f ± %f" %(f, f_err))
-    #print("importance sampling time: %.5f sec" %running_time)
-
     start = time.time()
     fe_rng, rng = random.split(rng)
-    fe, fe_err, X_syn, f, f_err = free_energy(fe_rng, trained_params, args.samplesize)
+    fe, fe_err, X_syn, f, f_err = free_energy(fe_rng, params, args.samplesize)
     end = time.time()
     running_time = end - start
     print("free energy using trained model: %f ± %f" %(fe, fe_err))
     print("variational free energy using trained model: %f ± %f" %(f, f_err))
     print("importance sampling time: %.5f sec" %running_time)
-
-    print("training loops: %i" % len(loss_history))
-
-    """plotting"""
-    plot_range = [(-2, 2), (-2, 2)]
-    n_bins = 100
-
-    X_syn_show = X_syn.reshape(-1, args.dim)
-
-    fig = plt.figure(figsize=(18, 6))
-    
-    plt.subplot(1, 2, 1)
-    plt.hist2d(X_syn_show[:, 0], X_syn_show[:, 1], bins=n_bins, range=plot_range, density=True, cmap="inferno")
-    plt.subplot(1, 2, 2)
-    y = jnp.reshape(jnp.array(loss_history), (-1, 2))
-    plt.errorbar(jnp.arange(y.shape[0]), y[:, 0], yerr=y[:, 1], marker="o", capsize=8)
-
-    if not os.path.exists(args.fig):
-        os.makedirs(args.fig)
-
-    if args.transformer:
-        plt.savefig(args.fig + "haiku_%s _%s_batchsize%i_epoch%i_samplesize%i_head%i_layer%i_key%i_beta%i_n%i_dim%i_lr%f.png" \
-                    % (net_name, training_method, args.batchsize, args.epoch, args.samplesize, args.nheads, args.numlayers, args.keysize, args.beta, args.n, args.dim, args.lr))
-    else:
-        plt.savefig(args.fig + "haiku_%s_%s_batchsize%i_epoch%i_samplesize%i_ch%i_layer%i_beta%i_n%i_dim%i_lr%f.png" \
-                    % (net_name, training_method, args.batchsize, args.epoch, args.samplesize, args.channel, args.numlayers, args.beta, args.n, args.dim, args.lr))
