@@ -28,10 +28,10 @@ group.add_argument("--epochs", type=int, default=1000, help="")
 group.add_argument("--batchsize", type=int, default=4096, help="")
 group.add_argument("--samplesize", type=int, default=8192, help="")
 group.add_argument("--lr", type=float, default=1e-3, help="learning rate")
-group.add_argument("--data", default="./data/", help="The folder to save data")
+group.add_argument("--data", default="../data/", help="The folder to save data")
 
 group = parser.add_argument_group("datasets")
-group.add_argument("--dataset", default="./datasets/",help="The folder to load training datasets")
+group.add_argument("--dataset", default="../datasets/",help="The folder to load training datasets")
 group.add_argument("--datasize", type=int, default=102400, help="")
 
 group = parser.add_argument_group("network parameters")
