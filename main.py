@@ -1,6 +1,4 @@
 import jax
-from jax.config import config
-config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 
 from data import make_sampler
@@ -9,16 +7,20 @@ from flow import NeuralODE
 from loss import make_loss
 from energy import energy_fun, make_free_energy
 from train import train
+from plot import plot
 
 import argparse
 import time
 import os
 
+jax.config.update("jax_enable_x64", True)
 rng = jax.random.PRNGKey(42)
 
 ####################################################################################
 
 parser = argparse.ArgumentParser(description="")
+
+parser.add_argument("--plot", action="store_true", help="Plot after training")
 
 group = parser.add_argument_group("learning parameters")
 group.add_argument("--coupled", action="store_true", help="Use coupled training method")
@@ -57,13 +59,13 @@ print("\n========== Prepare training dataset ==========")
 
 os.makedirs(args.dataset, exist_ok=True)
 
-file = args.dataset + "datasize%i_beta%i_n%i_dim%i.npz" % (args.datasize, args.beta, args.n, args.dim)
+ds_filename = os.path.join(args.dataset, "datasize_%d_n_%d_dim_%d_beta_%g.npz" % (args.datasize, args.beta, args.n, args.dim))
 
-if os.path.isfile(file):
-    data = jnp.load(file)
+if os.path.isfile(ds_filename):
+    data = jnp.load(ds_filename)
     X0, X1 = data["X0"], data["X1"]
 
-    print("Load dataset: %s" % file)
+    print("Load dataset: %s" % ds_filename)
 else:   
     sampler = make_sampler(args.datasize)
     data_rng, rng = jax.random.split(rng)
@@ -72,9 +74,9 @@ else:
     X0, X1 = sampler(data_rng, args.beta, args.n, args.dim)
     end = time.time()
     running_time = end - start
-    jnp.savez(file, X0=X0, X1=X1)      
+    jnp.savez(ds_filename, X0=X0, X1=X1)      
 
-    print("Generate dataset: %s" % file)
+    print("Generate dataset: %s" % ds_filename)
     print("sampling time: %.5f sec" % running_time)
 
 ####################################################################################
@@ -129,13 +131,19 @@ print("training time: %.5f sec" %running_time)
 
 ####################################################################################
 
-print("\n========== Calculate free energy ==========")
+print("\n========== Draw samples and calculate free energy ==========")
 
 start = time.time()
 fe_rng, rng = jax.random.split(rng)
-fe, fe_err, X_syn, f, f_err = free_energy(fe_rng, params, args.samplesize)
+fe, fe_err, samples, f, f_err = free_energy(fe_rng, params, args.samplesize)
 end = time.time()
 running_time = end - start
 print("free energy: %f ± %f" %(fe, fe_err))
 print("variational free energy: %f ± %f" %(f, f_err))
 print("importance sampling time: %.5f sec" %running_time)
+
+smp_filename = os.path.join(path, "samples.npy")
+jnp.save(smp_filename, samples)
+
+if args.plot:
+    plot(path)

@@ -26,3 +26,17 @@ def load_data(filename):
 def save_data(data, filename):
     with open(filename, "wb") as f:
         pickle.dump(data, f)
+
+def ckpt_hyperparams(filename):
+    if os.path.isfile(filename):
+        n = int(re.search(r"/n_([0-9]*)_", filename).group(1))
+        dim = int(re.search(r"_dim_([0-9]*)_", filename).group(1))
+        beta = float(re.search(r"_beta_(.*?)_", filename).group(1))
+
+        net = re.search(r"_([^_]*?)_nl_", filename).group(1)
+        nlayers = int(re.search(r"_nl_([0-9]*)_", filename).group(1))
+        nh = int(re.search(r"_nh_([0-9]*)", filename).group(1))
+        _ = re.search(r"_nk_([0-9]*)", filename)
+        nk = int(_.group(1)) if _ else None
+
+        return (n, dim, beta), (net, nlayers, nh, nk)
