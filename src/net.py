@@ -52,15 +52,10 @@ def EMLP_with_t(n, spatial_dim, ch=384, num_layers=3):
 
 def MLP_with_t(n, spatial_dim, ch=384, num_layers=3):
     
-    init = hk.initializers.Constant(0)
-    middle_layers = num_layers*[ch]
+    init = hk.initializers.TruncatedNormal(0.01)
+    layers = num_layers*[ch] + [n*spatial_dim]
 
-    network = Sequential(
-        lambda x: hk.nets.MLP(middle_layers)(x),
-        lambda x: hk.Linear(n*spatial_dim, init, init)(x)
-    )
-
-    return network
+    return lambda x: hk.nets.MLP(layers, init)(x)
 
 def make_vec_field_net(rng, n, spatial_dim, ch=512, num_layers=2, symmetry=False):
 
@@ -72,15 +67,10 @@ def make_vec_field_net(rng, n, spatial_dim, ch=512, num_layers=2, symmetry=False
     def vec_field_net(x, t):
         input = jnp.concatenate((x,t.reshape(1)))
         return model(input)
+    network = hk.without_apply_rng(hk.transform(vec_field_net))
+    params = network.init(rng, jnp.ones((n*spatial_dim,)), jnp.ones((1,)))
 
-    #return vec_field_net
-
-    net = hk.without_apply_rng(hk.transform(vec_field_net))
-
-    params = net.init(rng, jnp.ones((n*spatial_dim,)), jnp.ones((1,)))
-    net_apply = net.apply
-
-    return params, net_apply
+    return params, network.apply
 
 def make_backflow(key, n, dim, sizes):
     x = jax.random.normal(key, (n, dim))
