@@ -34,10 +34,10 @@ def train(rng, value_and_grad, num_epochs, batchsize, params, X0, X1, lr, path, 
     init_opt_state = optimizer.init(params)
     state = TrainingState(params, init_opt_state)
 
-    log_filename = os.path.join(path, "data.txt")
+    log_filename = os.path.join(path, "loss.txt")
     f = open(log_filename, "w", buffering=1, newline="\n")
     itercount = itertools.count()
-    for epoch in range(num_epochs+1):
+    for epoch in range(num_epochs):
         permute_rng, rng = jax.random.split(rng)
         X0 = jax.random.permutation(permute_rng, X0)
         X1 = jax.random.permutation(permute_rng, X1)
@@ -54,10 +54,10 @@ def train(rng, value_and_grad, num_epochs, batchsize, params, X0, X1, lr, path, 
 
         f.write( ("%6d" + "  %.6f" + "\n") % (epoch, total_loss/counter) )
 
-        if epoch % 100 == 0:
+        if epoch+1 % 100 == 0:
             ckpt = {"params": state.params,
                    }
-            ckpt_filename = os.path.join(path, "epoch_%06d.pkl" %(epoch))
+            ckpt_filename = os.path.join(path, "epoch_%6d.pkl" %(epoch))
             checkpoint.save_data(ckpt, ckpt_filename)
             print("Save checkpoint file: %s" % ckpt_filename)
 
