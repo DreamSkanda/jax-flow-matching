@@ -17,11 +17,7 @@ def train(rng, value_and_grad, num_epochs, batchsize, params, X0, X1, lr, path, 
 
     @jax.jit
     def step(rng, i, state, x0, x1):
-        t_rng, sample_rng = jax.random.split(rng)
-        if not coupled:
-            x0 = jax.random.normal(sample_rng, x1.shape)
-
-        t = jax.random.uniform(t_rng, (batchsize,))
+        t = jax.random.uniform(rng, (batchsize,))
 
         value, grad = value_and_grad(state.params, x0, x1, t)
 
@@ -45,9 +41,10 @@ def train(rng, value_and_grad, num_epochs, batchsize, params, X0, X1, lr, path, 
         total_loss = 0.0
         counter = 0 
         for batch_index in range(0, len(X1), batchsize):
-            x0, x1 = X0[batch_index:batch_index+batchsize], X1[batch_index:batch_index+batchsize]
+            sample_rng, step_rng, rng = jax.random.split(rng, 3)
+            x1 = X1[batch_index:batch_index+batchsize]
+            x0 = X0[batch_index:batch_index+batchsize] if coupled else jax.random.normal(sample_rng, x1.shape)
 
-            step_rng, rng = jax.random.split(rng)
             state, (d_mean, d_err) = step(step_rng, next(itercount), state, x0, x1)
             total_loss += d_mean
             counter += 1

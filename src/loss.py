@@ -12,8 +12,8 @@ def make_loss(vec_field_net):
     def loss(params, x0, x1, t):
         m = _matching(params, x0, x1, t)
         m_mean = jnp.mean(m)
-        m_std = jnp.std(m) / jnp.sqrt(m.shape[0])
-        return m_mean, m_std
+        #m_std = jnp.std(m) / jnp.sqrt(m.shape[0])
+        return m_mean#, m_std
 
     return loss
 

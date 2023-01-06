@@ -107,7 +107,7 @@ free_energy = make_free_energy(energy_fun, batched_sample_fun, args.n, args.dim,
 
 """initializing the loss function"""
 loss = make_loss(vec_field_net)
-value_and_grad = jax.value_and_grad(loss, argnums=0, has_aux=True)
+value_and_grad = jax.value_and_grad(loss)
 
 ####################################################################################
 
