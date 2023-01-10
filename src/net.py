@@ -2,7 +2,6 @@ import jax
 import jax.numpy as jnp
 from jax.example_libraries.stax import serial, Dense, Relu
 from jax.nn.initializers import zeros
-from jax import random
 import haiku as hk
 import emlp.nn.haiku as ehk
 from emlp.reps import V
@@ -101,10 +100,10 @@ if __name__ == '__main__':
     n = 6
     spatial_dim = 2
 
-    params, vec_field_net = make_vec_field_net(random.PRNGKey(42), n, spatial_dim, symmetry=False)
+    params, vec_field_net = make_vec_field_net(jax.random.PRNGKey(42), n, spatial_dim, symmetry=False)
 
-    x = random.normal(random.PRNGKey(41), (n*spatial_dim,))
-    t = random.normal(random.PRNGKey(40), (1,))
+    x = jax.random.normal(jax.random.PRNGKey(41), (n*spatial_dim,))
+    t = jax.random.normal(jax.random.PRNGKey(40), (1,))
 
     import time
     start = time.time()

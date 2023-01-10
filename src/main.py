@@ -6,7 +6,7 @@ from net import make_vec_field_net, make_backflow, make_transformer
 from flow import NeuralODE
 from loss import make_loss
 from energy import energy_fun, make_free_energy
-from train import train
+from train import train, train_and_evaluate
 from plot import plot
 
 import argparse
@@ -24,7 +24,8 @@ parser.add_argument("--plot", action="store_true", help="Plot after training")
 
 group = parser.add_argument_group("learning parameters")
 group.add_argument("--coupled", action="store_true", help="Use coupled training method")
-group.add_argument("--epochs", type=int, default=1000, help="")
+group.add_argument("--epochs", type=int, default=1000, help="Epochs for training")
+group.add_argument("--iterations", type=int, default=50, help="Training iterations in an epoch")
 group.add_argument("--batchsize", type=int, default=4096, help="")
 group.add_argument("--samplesize", type=int, default=8192, help="")
 group.add_argument("--lr", type=float, default=1e-3, help="learning rate")
@@ -32,7 +33,6 @@ group.add_argument("--data", default="../data/", help="The folder to save data")
 
 group = parser.add_argument_group("datasets")
 group.add_argument("--dataset", default="../datasets/",help="The folder to load training datasets")
-group.add_argument("--datasize", type=int, default=102400, help="")
 
 group = parser.add_argument_group("network parameters")
 group.add_argument("--nhiddens", type=int, default=512, help="The channels in a middle layer")
@@ -53,13 +53,15 @@ group.add_argument("--beta", type=float, default=10.0, help="The inverse tempera
 
 args = parser.parse_args()
 
+datasize = round(1.5*args.batchsize)*args.iterations if args.coupled else args.batchsize*args.iterations
+
 ####################################################################################
 
 print("\n========== Prepare training dataset ==========")
 
 os.makedirs(args.dataset, exist_ok=True)
 
-ds_filename = os.path.join(args.dataset, "datasize_%d_n_%d_dim_%d_beta_%g.npz" % (args.datasize, args.beta, args.n, args.dim))
+ds_filename = os.path.join(args.dataset, "datasize_%d_n_%d_dim_%d_beta_%g.npz" % (datasize, args.n, args.dim, args.beta))
 
 if os.path.isfile(ds_filename):
     data = jnp.load(ds_filename)
@@ -67,7 +69,7 @@ if os.path.isfile(ds_filename):
 
     print("Load dataset: %s" % ds_filename)
 else:   
-    sampler = make_sampler(args.datasize)
+    sampler = make_sampler(datasize)
     data_rng, rng = jax.random.split(rng)
 
     start = time.time()
@@ -107,7 +109,7 @@ free_energy = make_free_energy(energy_fun, batched_sample_fun, args.n, args.dim,
 
 """initializing the loss function"""
 loss = make_loss(vec_field_net)
-value_and_grad = jax.value_and_grad(loss, argnums=0, has_aux=True)
+value_and_grad = jax.value_and_grad(loss)
 
 ####################################################################################
 
@@ -123,8 +125,14 @@ print("Create directory: %s" % path)
 
 print("\n========== Train with %s samples ==========" % methodname)
 
+hyperparams = (args.epochs, args.iterations, args.batchsize)
 start = time.time()
-params = train(rng, value_and_grad, args.epochs, args.batchsize, params, X0, X1, args.lr, path, coupled=args.coupled)
+if args.coupled:
+    training_data = (X0[0:args.iterations*args.batchsize], X1[0:args.iterations*args.batchsize])
+    validation_data = (X0[args.iterations*args.batchsize:datasize], X1[args.iterations*args.batchsize:datasize])
+    params = train_and_evaluate(rng, loss, value_and_grad, hyperparams, params, training_data, validation_data, args.lr, path)
+else:
+    params = train(rng, value_and_grad, hyperparams, params, X1, args.lr, path)
 end = time.time()
 running_time = end - start
 print("training time: %.5f sec" %running_time)
@@ -146,4 +154,4 @@ smp_filename = os.path.join(path, "samples.npy")
 jnp.save(smp_filename, samples)
 
 if args.plot:
-    plot(path)
+    plot(path, args.coupled)
