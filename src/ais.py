@@ -1,5 +1,4 @@
 import jax 
-from jax.config import config
 import jax.numpy as jnp
 import numpy as np
 from functools import partial
@@ -50,7 +49,7 @@ def mcmc(logp_fn, x_init, key, mc_steps, mc_width=0.02):
     return x
 
 if __name__ == "__main__":
-    config.update("jax_enable_x64", True)
+    jax.config.update("jax_enable_x64", True)
     import argparse
     parser = argparse.ArgumentParser(description='')
 
