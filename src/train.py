@@ -71,11 +71,14 @@ def train_and_evaluate(rng, loss, value_and_grad, hyperparams, params, training_
     training_X0, training_X1 = training_data
     validation_X0, validation_X1 = validation_data
 
+    validation_batchsize = len(validation_X1)//num_iterations
+
     assert (len(training_X1)//batchsize==num_iterations and len(training_X1)%batchsize==0)
+    assert (len(validation_X1)//validation_batchsize==num_iterations and len(validation_X1)%validation_batchsize==0)
 
     @jax.jit
     def train_step(rng, i, state, x0, x1):
-        t = jax.random.uniform(rng, (batchsize,))
+        t = jax.random.uniform(rng, (x0.shape[0],))
 
         value, grad = value_and_grad(state.params, x0, x1, t)
 
@@ -86,7 +89,7 @@ def train_and_evaluate(rng, loss, value_and_grad, hyperparams, params, training_
 
     @jax.jit
     def test_step(rng, i, state, x0, x1):
-        t = jax.random.uniform(rng, (batchsize,))
+        t = jax.random.uniform(rng, (x0.shape[0],))
         value = loss(state.params, x0, x1, t)
         return value
     
@@ -116,9 +119,9 @@ def train_and_evaluate(rng, loss, value_and_grad, hyperparams, params, training_
             counter += 1
         
         # test
-        for batch_index in range(0, num_iterations, len(validation_X1)//num_iterations):
-            x0 = validation_X0[batch_index:batch_index+batchsize]
-            x1 = validation_X1[batch_index:batch_index+batchsize]
+        for batch_index in range(0, num_iterations, validation_batchsize):
+            x0 = validation_X0[batch_index:batch_index+validation_batchsize]
+            x1 = validation_X1[batch_index:batch_index+validation_batchsize]
 
             step_rng, rng = jax.random.split(rng)
             d_mean = test_step(step_rng, next(itercount), state, x0, x1)
