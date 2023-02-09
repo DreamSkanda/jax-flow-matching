@@ -1,0 +1,34 @@
+BootStrap: docker
+From: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
+
+%post
+    apt-get -y update 
+    
+    # # OR ,segment default for libc-bin, see https://github.com/AllPlatform/Termux-UbuntuX86_64/issues/6
+    rm /var/lib/dpkg/info/$nomdupaquet* -f
+    apt -f install
+    
+    apt-get -y install python3-pip git \
+
+    pip3 install --upgrade pip
+    pip install "jax[cuda11_cudnn82]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+    pip install pymanopt h5py ipython numba matplotlib typing typing-extensions emlp
+    pip install -U dm-haiku
+
+    # clear tmp data
+    # rm -rf /var/cache/apt/*
+    # rm -rf /tmp/*
+
+%environment
+    export LC_ALL=C
+    export XLA_FLAGS=--xla_gpu_force_compilation_parallelism=1
+    export XLA_PYTHON_CLIENT_PREALLOCATE=false
+
+%labels
+    MAINTAINER QiYang
+    CUDA_VERSION 11.8.0
+    CUDNN_VERSION 8.0
+    OS_VERSION 22.04
+
+%runscript
+    exec ipython "$@"
